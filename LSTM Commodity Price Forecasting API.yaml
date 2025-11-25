@@ -1,0 +1,386 @@
+openapi: 3.0.3
+info:
+  title: LSTM Commodity Price Forecasting API
+  version: 1.0.0
+  description: "API for predicting future commodity prices using LSTM neural networks.\n\nFeatures:\n-
+    Historical price data retrieval (monthly/daily)\n- LSTM-based price forecasting
+    with seasonal adjustments\n- JWT authentication\n- Support for Cocoa, Cashew,
+    and Sesame Seeds\n\nAuthentication:\nUse the /api/auth/token/ endpoint to obtain
+    JWT tokens.\nInclude the access token in the Authorization header: Bearer {token}\n
+    \   "
+paths:
+  /api/auth/token/:
+    post:
+      operationId: auth_token_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AuthTokenRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AuthTokenRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthTokenRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthToken'
+          description: ''
+  /api/auth/token/refresh/:
+    post:
+      operationId: auth_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/auth/token/verify/:
+    post:
+      operationId: auth_token_verify_create
+      description: |-
+        Takes a token and indicates if it is valid.  This view provides no
+        information about a token's fitness for a particular use.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenVerifyRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenVerifyRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenVerifyRequest'
+        required: true
+      responses:
+        '200':
+          description: No response body
+  /api/commodities/:
+    get:
+      operationId: commodities_retrieve
+      description: Returns a list of all available commodities for forecasting
+      summary: Get available commodities
+      tags:
+      - commodities
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommodityListResponse'
+              examples:
+                CommodityListExample:
+                  value:
+                    commodities:
+                    - Cocoa
+                    - Cashew
+                    - Sesame Seeds
+                  summary: Commodity List Example
+          description: ''
+  /api/forecast/:
+    get:
+      operationId: forecast_retrieve
+      description: 'Get LSTM-based price forecasts for a commodity. Default horizon:
+        12 periods for monthly, 180 for daily.'
+      summary: Get price forecasts
+      parameters:
+      - in: query
+        name: commodity
+        schema:
+          type: string
+          minLength: 1
+        description: Commodity name (e.g., Cocoa, Cashew, Sesame Seeds)
+        required: true
+      - in: query
+        name: frequency
+        schema:
+          enum:
+          - monthly
+          - daily
+          type: string
+          default: monthly
+          minLength: 1
+        description: |-
+          Forecast frequency: monthly or daily
+
+          * `monthly` - monthly
+          * `daily` - daily
+      - in: query
+        name: horizon
+        schema:
+          type: integer
+          minimum: 1
+        description: 'Number of periods to forecast (default: 12 for monthly, 180
+          for daily)'
+      tags:
+      - forecast
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForecastPricesResponse'
+              examples:
+                SuccessExample:
+                  value:
+                    commodity: Cocoa
+                    frequency: monthly
+                    horizon: 12
+                    data:
+                    - date: '2024-01-01'
+                      price: 2600.0
+                    - date: '2024-02-01'
+                      price: 2625.0
+                  summary: Success Example
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                ErrorExample:
+                  value:
+                    detail: Invalid commodity name or forecasting failed
+                  summary: Error Example
+          description: ''
+  /api/historical/:
+    get:
+      operationId: historical_retrieve
+      description: Get historical price data for a commodity with specified frequency
+      summary: Get historical prices
+      parameters:
+      - in: query
+        name: commodity
+        schema:
+          type: string
+          minLength: 1
+        description: Commodity name (e.g., Cocoa, Cashew, Sesame Seeds)
+        required: true
+      - in: query
+        name: frequency
+        schema:
+          enum:
+          - monthly
+          - daily
+          type: string
+          default: monthly
+          minLength: 1
+        description: |-
+          Data frequency: monthly or daily
+
+          * `monthly` - monthly
+          * `daily` - daily
+      tags:
+      - historical
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalPricesResponse'
+              examples:
+                SuccessExample:
+                  value:
+                    commodity: Cocoa
+                    frequency: monthly
+                    data:
+                    - date: '2023-01-01'
+                      price: 2500.0
+                    - date: '2023-02-01'
+                      price: 2550.0
+                  summary: Success Example
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                ErrorExample:
+                  value:
+                    detail: Invalid commodity name
+                  summary: Error Example
+          description: ''
+components:
+  schemas:
+    AuthToken:
+      type: object
+      properties:
+        token:
+          type: string
+          readOnly: true
+      required:
+      - token
+    AuthTokenRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - password
+      - username
+    CommodityListResponse:
+      type: object
+      properties:
+        commodities:
+          type: array
+          items:
+            type: string
+          description: List of available commodity names
+      required:
+      - commodities
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Error message
+      required:
+      - detail
+    ForecastPricesResponse:
+      type: object
+      properties:
+        commodity:
+          type: string
+          description: Commodity name
+        frequency:
+          type: string
+          description: Forecast frequency (monthly or daily)
+        horizon:
+          type: integer
+          description: Number of periods forecasted
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PriceData'
+          description: List of forecasted price data points
+      required:
+      - commodity
+      - data
+      - frequency
+      - horizon
+    HistoricalPricesResponse:
+      type: object
+      properties:
+        commodity:
+          type: string
+          description: Commodity name
+        frequency:
+          type: string
+          description: Data frequency (monthly or daily)
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PriceData'
+          description: List of historical price data points
+      required:
+      - commodity
+      - data
+      - frequency
+    PriceData:
+      type: object
+      properties:
+        date:
+          type: string
+          description: Date in YYYY-MM-DD format
+        price:
+          type: number
+          format: double
+          description: Price value
+      required:
+      - date
+      - price
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+      required:
+      - refresh
+    TokenVerifyRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - token
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
