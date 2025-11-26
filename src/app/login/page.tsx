@@ -86,8 +86,10 @@ export default function LoginPage() {
                             onSubmit={form.handleSubmit(onSubmit)}
                             className='space-y-4'
                         >
-                            <FormField name='username' control={form.control}>
-                                {({ field }) => (
+                            <FormField
+                                name='username'
+                                control={form.control}
+                                render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Username</FormLabel>
                                         <FormControl>
@@ -100,9 +102,11 @@ export default function LoginPage() {
                                         <FormMessage />
                                     </FormItem>
                                 )}
-                            </FormField>
-                            <FormField name='password' control={form.control}>
-                                {({ field }) => (
+                            />
+                            <FormField
+                                name='password'
+                                control={form.control}
+                                render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Password</FormLabel>
                                         <FormControl>
@@ -116,7 +120,7 @@ export default function LoginPage() {
                                         <FormMessage />
                                     </FormItem>
                                 )}
-                            </FormField>
+                            />
                             {error && (
                                 <div className='rounded-md bg-destructive/10 p-3 text-sm text-destructive'>
                                     {error}
