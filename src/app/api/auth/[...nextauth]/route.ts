@@ -1,7 +1,8 @@
 import NextAuth, { type NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { api } from "@/lib/api";
-import type { AuthTokenRequest } from "@/types/api";
+import { AuthService } from "@/lib/api/services/AuthService";
+import type { AuthTokenRequest } from "@/lib/api/models/AuthTokenRequest";
+import type { ApiError } from "@/lib/api/core/ApiError";
 
 export const authOptions: NextAuthOptions = {
     providers: [
@@ -14,26 +15,42 @@ export const authOptions: NextAuthOptions = {
             async authorize(credentials)
             {
                 if (!credentials?.username || !credentials?.password) {
-                    return null;
+                    throw new Error("Username and password are required");
                 }
 
                 try {
-                    const response = await api.authToken({
+                    const tokenRequest: AuthTokenRequest = {
                         username: credentials.username,
                         password: credentials.password,
-                    });
+                    };
 
-                    // The API returns a token, but we need to decode it to get user info
-                    // For now, we'll store the token and username
+                    const authToken = await AuthService.authTokenCreate(tokenRequest);
+
+
+
+                    // Handle both response formats: { token } or { access, refresh }
+                    const accessToken = (authToken as any).access || (authToken as any).token;
+                    const refreshToken = (authToken as any).refresh;
+
+                    if (!accessToken) {
+                        throw new Error("Invalid credentials");
+                    }
+
                     return {
                         id: credentials.username,
                         name: credentials.username,
                         email: credentials.username,
-                        accessToken: response.token,
+                        accessToken: accessToken,
+                        refreshToken: refreshToken,
                     };
-                } catch (error) {
-                    console.error("Auth error:", error);
-                    return null;
+                } catch (error: any) {
+                    console.error(error);
+                    const apiError = error as ApiError;
+                    if (apiError.status === 401) {
+
+                        throw new Error("Invalid username or password");
+                    }
+                    throw new Error(apiError.message || "Authentication failed");
                 }
             },
         }),
@@ -43,29 +60,34 @@ export const authOptions: NextAuthOptions = {
         {
             if (user) {
                 token.accessToken = (user as any).accessToken;
+                token.refreshToken = (user as any).refreshToken;
                 token.id = user.id;
             }
+
+            console.log("jwt token", token);
             return token;
         },
         async session({ session, token })
         {
-            if (session.user) {
-                session.user.id = token.id as string;
+            if (token) {
                 (session as any).accessToken = token.accessToken;
+                (session as any).user.id = token.id;
             }
+            console.log("session token", token);
             return session;
         },
     },
     pages: {
         signIn: "/login",
+        error: "/login",
     },
     session: {
         strategy: "jwt",
     },
-    secret: process.env.NEXTAUTH_SECRET,
+    secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
+    debug: process.env.NODE_ENV === "development",
 };
 
 const handler = NextAuth(authOptions);
 
 export { handler as GET, handler as POST };
-

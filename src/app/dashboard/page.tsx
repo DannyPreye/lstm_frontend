@@ -1,264 +1,253 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { motion } from "framer-motion";
 import { useSession } from "next-auth/react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useCommodities } from "@/hooks/use-commodities";
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { CommoditySelector } from "@/components/CommoditySelector";
-import { FrequencySelector } from "@/components/FrequencySelector";
-import { PriceChart } from "@/components/PriceChart";
-import { ComparisonChart } from "@/components/ComparisonChart";
-import { clientApi } from "@/lib/api-client";
-import type {
-  ForecastPricesResponse,
-  HistoricalPricesResponse,
-} from "@/types/api";
+import { Select } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+    Loader2,
+    TrendingUp,
+    BarChart3,
+    LineChart,
+    LogOut,
+    Package,
+    Brain,
+    ArrowRight,
+} from "lucide-react";
+import { signOut } from "next-auth/react";
+
+const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+        opacity: 1,
+        transition: {
+            staggerChildren: 0.1,
+        },
+    },
+} as const;
+
+const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+        opacity: 1,
+        y: 0,
+        transition: {
+            duration: 0.5,
+        },
+    },
+} as const;
 
 export default function DashboardPage() {
-  const { data: session } = useSession();
-  const [commodities, setCommodities] = useState<string[]>([]);
-  const [selectedCommodity, setSelectedCommodity] = useState("");
-  const [frequency, setFrequency] = useState<"monthly" | "daily">("monthly");
-  const [horizon, setHorizon] = useState("12");
-  const [forecastData, setForecastData] =
-    useState<ForecastPricesResponse | null>(null);
-  const [historicalData, setHistoricalData] =
-    useState<HistoricalPricesResponse | null>(null);
-  const [isLoadingForecast, setIsLoadingForecast] = useState(false);
-  const [isLoadingHistorical, setIsLoadingHistorical] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+    const { data: session } = useSession();
+    const router = useRouter();
+    const { data: commoditiesData, isLoading: commoditiesLoading } =
+        useCommodities();
+    const [selectedCommodity, setSelectedCommodity] = useState<string>("");
 
-  // Load commodities on mount
-  useEffect(() => {
-    const loadCommodities = async () => {
-      try {
-        const data = await clientApi.getCommodities();
-        setCommodities(data.commodities);
-        if (data.commodities.length > 0) {
-          setSelectedCommodity(data.commodities[0]);
-        }
-      } catch (err) {
-        setError("Failed to load commodities");
-      }
+    const handleLogout = async () => {
+        await signOut({ redirect: true, callbackUrl: "/login" });
     };
-    loadCommodities();
-  }, []);
 
-  const handleLoadForecast = async () => {
-    if (!selectedCommodity) return;
+    return (
+        <div className='min-h-screen bg-background p-4 md:p-8'>
+            <motion.div
+                variants={containerVariants}
+                initial='hidden'
+                animate='visible'
+                className='max-w-7xl mx-auto space-y-6'
+            >
+                {/* Header */}
+                <motion.div
+                    variants={itemVariants}
+                    className='flex justify-between items-center'
+                >
+                    <div>
+                        <h1 className='text-3xl font-bold text-foreground'>
+                            Welcome back, {session?.user?.name || "User"}
+                        </h1>
+                        <p className='text-muted-foreground mt-1'>
+                            Explore commodity price forecasts and historical
+                            data
+                        </p>
+                    </div>
+                    <Button
+                        variant='outline'
+                        onClick={handleLogout}
+                        className='flex items-center gap-2 shadow-sm'
+                    >
+                        <LogOut className='h-4 w-4' />
+                        Logout
+                    </Button>
+                </motion.div>
 
-    setIsLoadingForecast(true);
-    setError(null);
-    try {
-      const data = await clientApi.getForecast({
-        commodity: selectedCommodity,
-        frequency,
-        horizon: parseInt(horizon) || undefined,
-      });
-      setForecastData(data);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "Failed to load forecast");
-    } finally {
-      setIsLoadingForecast(false);
-    }
-  };
+                {/* Commodity Selector */}
+                <motion.div variants={itemVariants}>
+                    <Card className='shadow-lg border-border/50'>
+                        <CardHeader className='pb-4'>
+                            <CardTitle className='text-xl flex items-center gap-2'>
+                                <Package className='h-5 w-5 text-primary' />
+                                Select Commodity
+                            </CardTitle>
+                            <CardDescription>
+                                Choose a commodity to view forecasts and
+                                historical data
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {commoditiesLoading ? (
+                                <Skeleton className='h-10 w-full' />
+                            ) : (
+                                <Select
+                                    value={selectedCommodity}
+                                    onChange={(e) =>
+                                        setSelectedCommodity(e.target.value)
+                                    }
+                                    className='w-full'
+                                >
+                                    <option value=''>
+                                        Select a commodity...
+                                    </option>
+                                    {commoditiesData?.commodities.map(
+                                        (commodity) => (
+                                            <option
+                                                key={commodity}
+                                                value={commodity}
+                                            >
+                                                {commodity}
+                                            </option>
+                                        )
+                                    )}
+                                </Select>
+                            )}
+                        </CardContent>
+                    </Card>
+                </motion.div>
 
-  const handleLoadHistorical = async () => {
-    if (!selectedCommodity) return;
+                {/* Stats Cards */}
+                <motion.div
+                    variants={itemVariants}
+                    className='grid grid-cols-1 md:grid-cols-2 gap-6'
+                >
+                    <Card className='shadow-lg border-border/50 hover:shadow-xl transition-shadow'>
+                        <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-3'>
+                            <CardTitle className='text-base font-semibold'>
+                                Available Commodities
+                            </CardTitle>
+                            <div className='rounded-full bg-primary/10 p-2'>
+                                <TrendingUp className='h-5 w-5 text-primary' />
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className='text-3xl font-bold text-foreground mb-1'>
+                                {commoditiesData?.commodities.length || 0}
+                            </div>
+                            <p className='text-sm text-muted-foreground'>
+                                Commodities available for forecasting
+                            </p>
+                        </CardContent>
+                    </Card>
 
-    setIsLoadingHistorical(true);
-    setError(null);
-    try {
-      const data = await clientApi.getHistorical({
-        commodity: selectedCommodity,
-        frequency,
-      });
-      setHistoricalData(data);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "Failed to load historical data");
-    } finally {
-      setIsLoadingHistorical(false);
-    }
-  };
+                    <Card className='shadow-lg border-border/50 hover:shadow-xl transition-shadow'>
+                        <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-3'>
+                            <CardTitle className='text-base font-semibold'>
+                                Forecast Models
+                            </CardTitle>
+                            <div className='rounded-full bg-primary/10 p-2'>
+                                <Brain className='h-5 w-5 text-primary' />
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className='text-3xl font-bold text-foreground mb-1'>
+                                LSTM
+                            </div>
+                            <p className='text-sm text-muted-foreground'>
+                                Deep learning forecasting model
+                            </p>
+                        </CardContent>
+                    </Card>
+                </motion.div>
 
-  // Auto-load historical data when commodity or frequency changes
-  useEffect(() => {
-    if (selectedCommodity) {
-      const loadHistorical = async () => {
-        setIsLoadingHistorical(true);
-        setError(null);
-        try {
-          const data = await clientApi.getHistorical({
-            commodity: selectedCommodity,
-            frequency,
-          });
-          setHistoricalData(data);
-        } catch (err: any) {
-          setError(
-            err.response?.data?.detail || "Failed to load historical data"
-          );
-        } finally {
-          setIsLoadingHistorical(false);
-        }
-      };
-      loadHistorical();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCommodity, frequency]);
+                {/* Navigation Cards */}
+                <motion.div
+                    variants={itemVariants}
+                    className='grid grid-cols-1 md:grid-cols-2 gap-6'
+                >
+                    <motion.div
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        <Link href='/dashboard/historical'>
+                            <Card className='cursor-pointer hover:border-primary hover:shadow-xl transition-all h-full shadow-lg border-border/50 group'>
+                                <CardHeader className='pb-3'>
+                                    <CardTitle className='flex items-center justify-between text-xl'>
+                                        <div className='flex items-center gap-3'>
+                                            <div className='rounded-lg bg-primary/10 p-2 group-hover:bg-primary/20 transition-colors'>
+                                                <BarChart3 className='h-6 w-6 text-primary' />
+                                            </div>
+                                            <span>Historical Viewer</span>
+                                        </div>
+                                        <ArrowRight className='h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all' />
+                                    </CardTitle>
+                                    <CardDescription className='mt-2'>
+                                        Explore historical price data for
+                                        commodities
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className='text-sm text-muted-foreground leading-relaxed'>
+                                        View past price trends, analyze
+                                        patterns, and export data for analysis.
+                                    </p>
+                                </CardContent>
+                            </Card>
+                        </Link>
+                    </motion.div>
 
-  const comparisonSeries = [];
-  if (historicalData) {
-    comparisonSeries.push({
-      name: "Historical",
-      data: historicalData.data,
-      color: "#22c55e",
-    });
-  }
-  if (forecastData) {
-    comparisonSeries.push({
-      name: "Forecast",
-      data: forecastData.data,
-      color: "#16a34a",
-    });
-  }
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-        <p className="text-muted-foreground">
-          View forecasts and historical data for commodities
-        </p>
-      </div>
-
-      {error && (
-        <Card className="border-destructive bg-destructive/10">
-          <CardContent className="pt-6">
-            <p className="text-sm text-destructive">{error}</p>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Filters</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
-            <CommoditySelector
-              commodities={commodities}
-              value={selectedCommodity}
-              onValueChange={setSelectedCommodity}
-            />
-            <FrequencySelector
-              value={frequency}
-              onValueChange={setFrequency}
-            />
-            <div className="space-y-2">
-              <Label htmlFor="horizon">Forecast Horizon</Label>
-              <Input
-                id="horizon"
-                type="number"
-                min="1"
-                value={horizon}
-                onChange={(e) => setHorizon(e.target.value)}
-                placeholder={frequency === "monthly" ? "12" : "180"}
-              />
-            </div>
-            <div className="flex items-end">
-              <Button
-                onClick={handleLoadForecast}
-                disabled={!selectedCommodity || isLoadingForecast}
-                className="w-full"
-              >
-                {isLoadingForecast ? "Loading..." : "Load Forecast"}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Tabs defaultValue="forecast" className="w-full">
-        <TabsList>
-          <TabsTrigger value="forecast">Forecast</TabsTrigger>
-          <TabsTrigger value="historical">Historical</TabsTrigger>
-          <TabsTrigger value="comparison">Comparison</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="forecast" className="mt-6">
-          {isLoadingForecast ? (
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex h-64 items-center justify-center">
-                  <div className="text-muted-foreground">Loading forecast...</div>
-                </div>
-              </CardContent>
-            </Card>
-          ) : forecastData ? (
-            <PriceChart
-              data={forecastData.data}
-              title={`${forecastData.commodity} Forecast (${forecastData.frequency})`}
-              color="#22c55e"
-            />
-          ) : (
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex h-64 items-center justify-center text-muted-foreground">
-                  Click "Load Forecast" to view forecast data
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="historical" className="mt-6">
-          {isLoadingHistorical ? (
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex h-64 items-center justify-center">
-                  <div className="text-muted-foreground">
-                    Loading historical data...
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ) : historicalData ? (
-            <PriceChart
-              data={historicalData.data}
-              title={`${historicalData.commodity} Historical (${historicalData.frequency})`}
-              color="#16a34a"
-            />
-          ) : (
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex h-64 items-center justify-center text-muted-foreground">
-                  Historical data will load automatically
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="comparison" className="mt-6">
-          {comparisonSeries.length > 0 ? (
-            <ComparisonChart
-              series={comparisonSeries}
-              title={`${selectedCommodity} - Historical vs Forecast`}
-            />
-          ) : (
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex h-64 items-center justify-center text-muted-foreground">
-                  Load both historical and forecast data to see comparison
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
+                    <motion.div
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        <Link href='/dashboard/forecast'>
+                            <Card className='cursor-pointer hover:border-primary hover:shadow-xl transition-all h-full shadow-lg border-border/50 group'>
+                                <CardHeader className='pb-3'>
+                                    <CardTitle className='flex items-center justify-between text-xl'>
+                                        <div className='flex items-center gap-3'>
+                                            <div className='rounded-lg bg-primary/10 p-2 group-hover:bg-primary/20 transition-colors'>
+                                                <LineChart className='h-6 w-6 text-primary' />
+                                            </div>
+                                            <span>Forecast Generator</span>
+                                        </div>
+                                        <ArrowRight className='h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all' />
+                                    </CardTitle>
+                                    <CardDescription className='mt-2'>
+                                        Generate LSTM-based price forecasts
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className='text-sm text-muted-foreground leading-relaxed'>
+                                        Create custom forecasts with adjustable
+                                        parameters and visualize predictions.
+                                    </p>
+                                </CardContent>
+                            </Card>
+                        </Link>
+                    </motion.div>
+                </motion.div>
+            </motion.div>
+        </div>
+    );
 }

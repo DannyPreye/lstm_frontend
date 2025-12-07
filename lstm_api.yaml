@@ -1,14 +1,70 @@
 openapi: 3.0.3
 info:
-  title: LSTM Commodity Price Forecasting API
+  title: LSTM Forecast API
   version: 1.0.0
-  description: "API for predicting future commodity prices using LSTM neural networks.\n\nFeatures:\n-
-    Historical price data retrieval (monthly/daily)\n- LSTM-based price forecasting
-    with seasonal adjustments\n- JWT authentication\n- Support for Cocoa, Cashew,
-    and Sesame Seeds\n\nAuthentication:\nUse the /api/auth/token/ endpoint to obtain
-    JWT tokens.\nInclude the access token in the Authorization header: Bearer {token}\n
-    \   "
+  description: API for commodity price forecasting using LSTM models
 paths:
+  /api/auth/register/:
+    post:
+      operationId: auth_register_create
+      description: Create a new user account with username, email, and password
+      summary: Register a new user
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              RequestExample:
+                value:
+                  username: johndoe
+                  email: john@example.com
+                  password: securepassword123
+                  password_confirmation: securepassword123
+                summary: Request Example
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+              examples:
+                SuccessExample:
+                  value:
+                    id: 1
+                    username: johndoe
+                    email: john@example.com
+                    message: User registered successfully
+                  summary: Success Example
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                ErrorExample:
+                  value:
+                    username:
+                    - A user with that username already exists.
+                    password_confirmation:
+                    - Passwords do not match.
+                  summary: Error Example
+          description: ''
   /api/auth/token/:
     post:
       operationId: auth_token_create
@@ -126,7 +182,6 @@ paths:
         schema:
           type: string
           minLength: 1
-        description: Commodity name (e.g., Cocoa, Cashew, Sesame Seeds)
         required: true
       - in: query
         name: frequency
@@ -138,8 +193,6 @@ paths:
           default: monthly
           minLength: 1
         description: |-
-          Forecast frequency: monthly or daily
-
           * `monthly` - monthly
           * `daily` - daily
       - in: query
@@ -147,8 +200,6 @@ paths:
         schema:
           type: integer
           minimum: 1
-        description: 'Number of periods to forecast (default: 12 for monthly, 180
-          for daily)'
       tags:
       - forecast
       security:
@@ -197,7 +248,6 @@ paths:
         schema:
           type: string
           minLength: 1
-        description: Commodity name (e.g., Cocoa, Cashew, Sesame Seeds)
         required: true
       - in: query
         name: frequency
@@ -209,8 +259,6 @@ paths:
           default: monthly
           minLength: 1
         description: |-
-          Data frequency: monthly or daily
-
           * `monthly` - monthly
           * `daily` - daily
       tags:
@@ -249,8 +297,120 @@ paths:
                     detail: Invalid commodity name
                   summary: Error Example
           description: ''
+  /api/prices/submit/:
+    post:
+      operationId: prices_submit_create
+      description: Submit actual market price data for a specific month. The model
+        will use this for continuous learning and improved predictions. Date should
+        be the first day of the month (e.g., 2026-01-01 for January 2026).
+      summary: Submit actual market price
+      tags:
+      - prices
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActualPriceRequest'
+            examples:
+              RequestExample:
+                value:
+                  commodity: Cocoa Beans
+                  date: '2026-01-01'
+                  price: '4200.00'
+                  notes: Market price from Lagos commodity exchange
+                summary: Request Example
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ActualPriceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ActualPriceRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActualPriceResponse'
+              examples:
+                SuccessExample:
+                  value:
+                    id: 1
+                    commodity: Cocoa Beans
+                    date: '2026-01-01'
+                    price: '4200.00'
+                    message: Price submitted successfully
+                    will_retrain: true
+                  summary: Success Example
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
 components:
   schemas:
+    ActualPriceRequest:
+      type: object
+      description: Serializer for submitting actual market prices.
+      properties:
+        commodity:
+          type: string
+          minLength: 1
+          description: Commodity name (e.g., 'Cocoa Beans')
+        date:
+          type: string
+          format: date
+          description: 'Date of the actual price (format: YYYY-MM-DD). Should be the
+            first day of the month for monthly prices.'
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Actual market price
+        notes:
+          type: string
+          description: Optional notes about the price
+      required:
+      - commodity
+      - date
+      - price
+    ActualPriceResponse:
+      type: object
+      description: Response serializer for price submissions.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        commodity:
+          type: string
+          readOnly: true
+        date:
+          type: string
+          format: date
+          readOnly: true
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+        message:
+          type: string
+          default: Price submitted successfully
+        will_retrain:
+          type: boolean
+          default: false
+          description: Whether model will be retrained with this data
+      required:
+      - commodity
+      - date
+      - id
+      - price
     AuthToken:
       type: object
       properties:
@@ -344,6 +504,55 @@ components:
       required:
       - date
       - price
+    RegisterRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 3
+          description: Required. 3-150 characters. Letters, digits and @/./+/-/_ only.
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          minLength: 1
+          description: Required. A valid email address.
+        password:
+          type: string
+          writeOnly: true
+          minLength: 8
+          description: Required. Minimum 8 characters.
+        password_confirmation:
+          type: string
+          writeOnly: true
+          minLength: 1
+          description: Required. Must match the password field.
+      required:
+      - email
+      - password
+      - password_confirmation
+      - username
+    RegisterResponse:
+      type: object
+      description: Serializer for registration response.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        message:
+          type: string
+          default: User registered successfully
+      required:
+      - email
+      - id
+      - username
     TokenRefresh:
       type: object
       properties:
