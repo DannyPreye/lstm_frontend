@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
 import { useCommodities } from "@/hooks/use-commodities";
 import { useHistorical } from "@/hooks/use-historical";
 import { useForecast } from "@/hooks/use-forecast";
@@ -29,7 +28,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import {
     Loader2,
-    ArrowLeft,
     Sparkles,
     TrendingUp,
     Calendar,
@@ -37,6 +35,9 @@ import {
 } from "lucide-react";
 import { formatDate } from "@/lib/utils/date-formatter";
 import { formatPrice } from "@/lib/utils/price-formatter";
+import { Activity, ArrowUpRight, ArrowDownRight, Info, AlertCircle, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useSearchParams } from "next/navigation";
 
 const containerVariants = {
     hidden: { opacity: 0 },
@@ -46,7 +47,7 @@ const containerVariants = {
             staggerChildren: 0.1,
         },
     },
-} as const;
+};
 
 const itemVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -57,14 +58,26 @@ const itemVariants = {
             duration: 0.5,
         },
     },
-} as const;
+};
 
 export default function ForecastGeneratorPage() {
-    const router = useRouter();
+    return (
+        <Suspense fallback={
+            <div className="flex items-center justify-center h-screen">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        }>
+            <ForecastGeneratorContent />
+        </Suspense>
+    );
+}
+
+function ForecastGeneratorContent() {
     const [selectedCommodity, setSelectedCommodity] = useState<string>("");
     const frequency: "monthly" = "monthly"; // Always monthly
     const [horizon, setHorizon] = useState<string>("");
-    const [shouldGenerate, setShouldGenerate] = useState(false);
+    const [ shouldGenerate, setShouldGenerate ] = useState(false);
+
 
     const defaultHorizon = 12; // Monthly default
 
@@ -76,6 +89,16 @@ export default function ForecastGeneratorPage() {
             frequency,
             !!selectedCommodity && shouldGenerate
         );
+    const searchParams = useSearchParams();
+
+    useEffect(() => {
+        if (commoditiesData?.commodities.length) {
+            const searchCommodity = searchParams.get("commodity");
+            if (searchCommodity && commoditiesData?.commodities.includes(searchCommodity)) {
+                setSelectedCommodity(searchCommodity);
+            }
+        }
+    }, [commoditiesData]);
 
     const {
         data: forecastData,
@@ -103,306 +126,277 @@ export default function ForecastGeneratorPage() {
         setHorizon("");
     };
 
-    return (
-        <div className='min-h-screen bg-background p-4 md:p-8'>
-            <motion.div
-                variants={containerVariants}
-                initial='hidden'
-                animate='visible'
-                className='max-w-7xl mx-auto space-y-6'
-            >
-                {/* Header */}
-                <motion.div
-                    variants={itemVariants}
-                    className='flex items-center justify-between'
-                >
-                    <div className='flex items-center gap-4'>
-                        <Button
-                            variant='outline'
-                            onClick={() => router.push("/dashboard")}
-                            className='shadow-sm'
-                        >
-                            <ArrowLeft className='h-4 w-4 mr-2' />
-                            Back to Dashboard
-                        </Button>
-                        <div>
-                            <h1 className='text-3xl font-bold text-foreground'>
-                                Forecast Generator
-                            </h1>
-                            <p className='text-muted-foreground mt-1'>
-                                Generate LSTM-based price forecasts for
-                                commodities
-                            </p>
-                        </div>
-                    </div>
-                </motion.div>
+    const forecastStats = forecastData?.data && forecastData.data.length > 0 ? {
+        latest: (forecastData.data[0] as any).predicted_price ?? (forecastData.data[0] as any).price,
+        horizonEnd: (forecastData.data[forecastData.data.length - 1] as any).predicted_price ?? (forecastData.data[forecastData.data.length - 1] as any).price,
+        max: Math.max(...forecastData.data.map(d => (d as any).predicted_price ?? d.price)),
+        avg: forecastData.data.reduce((acc, curr) => acc + ((curr as any).predicted_price ?? curr.price), 0) / forecastData.data.length,
+    } : null;
 
-                {/* Controls */}
-                <motion.div variants={itemVariants}>
-                    <Card className='shadow-lg border-border/50'>
-                        <CardHeader className='pb-4'>
-                            <CardTitle className='text-xl flex items-center gap-2'>
-                                <Target className='h-5 w-5 text-primary' />
-                                Forecast Parameters
+    const totalTrend = forecastStats && historicalData?.data && historicalData.data.length > 0
+        ? ((forecastStats.horizonEnd - historicalData.data[historicalData.data.length - 1].price) / historicalData.data[historicalData.data.length - 1].price) * 100
+        : 0;
+
+    const isUpwardTrend = totalTrend >= 0;
+
+    return (
+        <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            className="space-y-8 max-w-7xl mx-auto"
+        >
+            {/* Header Section */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Price Forecast</h1>
+                    <p className="text-muted-foreground mt-1">
+                        AI-powered predictive modeling for commodity markets.
+                    </p>
+                </div>
+                <div className="flex items-center gap-3">
+                    {commoditiesLoading ? (
+                        <Skeleton className="h-10 w-48" />
+                    ) : (
+                        <div className="flex items-center gap-2 bg-background border rounded-lg px-3 py-1 shadow-sm">
+                            <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                            <select
+                                value={selectedCommodity}
+                                onChange={(e) => {
+                                    setSelectedCommodity(e.target.value);
+                                    setShouldGenerate(false);
+                                }}
+                                className="bg-transparent border-none focus:ring-0 text-sm font-medium py-1 pr-8"
+                            >
+                                <option value="">Select Commodity...</option>
+                                {commoditiesData?.commodities.map((c) => (
+                                    <option key={c} value={c}>{c}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                {/* Parameters Sidebar */}
+                <div className="lg:col-span-1 space-y-6">
+                    <Card className="shadow-sm border-border/50">
+                        <CardHeader className="pb-4">
+                            <CardTitle className="text-lg flex items-center gap-2">
+                                <Target className="h-5 w-5 text-primary" />
+                                Model Config
                             </CardTitle>
-                            <CardDescription>
-                                Configure parameters to generate price forecasts
-                            </CardDescription>
                         </CardHeader>
-                        <CardContent className='space-y-6'>
-                            <div className='space-y-2'>
-                                <Label
-                                    htmlFor='commodity'
-                                    className='text-sm font-semibold'
-                                >
-                                    Commodity
+                        <CardContent className="space-y-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="horizon" className="text-sm font-semibold">
+                                    Forecast Horizon
                                 </Label>
-                                {commoditiesLoading ? (
-                                    <Skeleton className='h-10 w-full' />
-                                ) : (
-                                    <Select
-                                        id='commodity'
-                                        value={selectedCommodity}
+                                <div className="relative">
+                                    <Input
+                                        id="horizon"
+                                        type="number"
+                                        placeholder={defaultHorizon.toString()}
+                                        value={horizon}
                                         onChange={(e) => {
-                                            setSelectedCommodity(
-                                                e.target.value
-                                            );
+                                            setHorizon(e.target.value);
                                             setShouldGenerate(false);
                                         }}
-                                        className='w-full'
-                                    >
-                                        <option value=''>
-                                            Select a commodity...
-                                        </option>
-                                        {commoditiesData?.commodities.map(
-                                            (commodity) => (
-                                                <option
-                                                    key={commodity}
-                                                    value={commodity}
-                                                >
-                                                    {commodity}
-                                                </option>
-                                            )
-                                        )}
-                                    </Select>
-                                )}
-                            </div>
-
-                            <div className='space-y-2'>
-                                <Label
-                                    htmlFor='horizon'
-                                    className='text-sm font-semibold'
-                                >
-                                    Horizon (number of periods to forecast)
-                                </Label>
-                                <Input
-                                    id='horizon'
-                                    type='number'
-                                    placeholder={defaultHorizon.toString()}
-                                    value={horizon}
-                                    onChange={(e) => {
-                                        setHorizon(e.target.value);
-                                        setShouldGenerate(false);
-                                    }}
-                                    min='1'
-                                />
-                                <p className='text-xs text-muted-foreground'>
-                                    Leave empty to use default ({defaultHorizon}{" "}
-                                    periods)
+                                        min="1"
+                                        className="pr-16"
+                                    />
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground uppercase">
+                                        Months
+                                    </div>
+                                </div>
+                                <p className="text-[10px] text-muted-foreground flex items-start gap-1">
+                                    <Info className="h-3 w-3 shrink-0 mt-0.5" />
+                                    Longer horizons increase uncertainty.
                                 </p>
                             </div>
 
-                            <div className='flex gap-3 pt-2'>
+                            <div className="pt-2 space-y-3">
                                 <Button
                                     onClick={handleGenerate}
-                                    disabled={
-                                        !selectedCommodity ||
-                                        forecastLoading ||
-                                        historicalLoading
-                                    }
-                                    className='flex items-center gap-2 shadow-sm'
-                                    size='lg'
+                                    disabled={!selectedCommodity || forecastLoading}
+                                    className="w-full shadow-sm"
+                                    size="lg"
                                 >
-                                    {forecastLoading || historicalLoading ? (
-                                        <>
-                                            <Loader2 className='h-4 w-4 animate-spin' />
-                                            Generating...
-                                        </>
+                                    {forecastLoading ? (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
                                     ) : (
-                                        <>
-                                            <Sparkles className='h-4 w-4' />
-                                            Generate Forecast
-                                        </>
+                                        <Sparkles className="h-4 w-4 mr-2" />
                                     )}
+                                    {forecastLoading ? "Calculating..." : "Run Prediction"}
                                 </Button>
                                 {shouldGenerate && (
                                     <Button
-                                        variant='outline'
+                                        variant="ghost"
                                         onClick={handleReset}
-                                        className='shadow-sm'
-                                        size='lg'
+                                        className="w-full text-xs"
+                                        size="sm"
                                     >
-                                        Reset
+                                        Clear Results
                                     </Button>
                                 )}
                             </div>
                         </CardContent>
                     </Card>
-                </motion.div>
 
-                {/* Results */}
-                {shouldGenerate && selectedCommodity && (
-                    <motion.div>
-                        <Card className='shadow-lg border-border/50'>
-                            <CardHeader className='pb-4'>
-                                <CardTitle className='text-xl flex items-center gap-2'>
-                                    <TrendingUp className='h-5 w-5 text-primary' />
-                                    Forecast Results - {selectedCommodity}
-                                </CardTitle>
-                                <CardDescription className='flex items-center gap-2 mt-1'>
-                                    <Calendar className='h-4 w-4' />
-                                    Monthly frequency
-                                    {forecastData
-                                        ? ` • ${forecastData.horizon} periods forecasted`
-                                        : " • Generating forecast..."}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {forecastLoading || historicalLoading ? (
-                                    <div className='space-y-4'>
-                                        <Skeleton className='h-[450px] w-full' />
-                                        <div className='space-y-2'>
-                                            <Skeleton className='h-10 w-full' />
-                                            <Skeleton className='h-10 w-full' />
-                                            <Skeleton className='h-10 w-full' />
+                    {shouldGenerate && forecastStats && (
+                        <motion.div
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            className="bg-primary/5 rounded-xl border border-primary/10 p-4 space-y-4"
+                        >
+                            <h4 className="text-xs font-bold uppercase tracking-widest text-primary/70">Forecast Insight</h4>
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                    {isUpwardTrend ? (
+                                        <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center">
+                                            <ArrowUpRight className="h-4 w-4 text-green-500" />
                                         </div>
-                                    </div>
-                                ) : forecastError ? (
-                                    <div className='flex flex-col items-center justify-center h-64 text-destructive space-y-3'>
-                                        <div className='rounded-full bg-destructive/10 p-3'>
-                                            <Loader2 className='h-6 w-6' />
+                                    ) : (
+                                        <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center">
+                                            <ArrowDownRight className="h-4 w-4 text-red-500" />
                                         </div>
-                                        <p className='font-semibold text-lg'>
-                                            Error generating forecast
-                                        </p>
-                                        <p className='text-sm text-muted-foreground text-center max-w-md'>
-                                            {forecastError instanceof Error
-                                                ? forecastError.message
-                                                : "Please try again or adjust your parameters"}
-                                        </p>
+                                    )}
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Market Outlook</p>
+                                        <p className="text-sm font-bold">{isUpwardTrend ? "Bullish Trend" : "Bearish Trend"}</p>
                                     </div>
-                                ) : forecastData?.data &&
-                                  Array.isArray(forecastData.data) &&
-                                  forecastData.data.length > 0 ? (
+                                </div>
+                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                    Projected {Math.abs(totalTrend).toFixed(1)}% {isUpwardTrend ? "increase" : "decrease"} over the next {horizon || defaultHorizon} months.
+                                </p>
+                            </div>
+                        </motion.div>
+                    )}
+                </div>
+
+                {/* Main Content Area */}
+                <div className="lg:col-span-3 space-y-8">
+                    {!shouldGenerate ? (
+                        <Card className="border-dashed border-2 bg-muted/30 h-[500px] flex items-center justify-center">
+                            <div className="text-center space-y-4 max-w-sm">
+                                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
+                                    <Sparkles className="h-8 w-8 text-primary" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold">Predictive Intelligence</h3>
+                                    <p className="text-muted-foreground">
+                                        Our LSTM model analyzes historical patterns to generate future price movements. Configure parameters to start.
+                                    </p>
+                                </div>
+                            </div>
+                        </Card>
+                    ) : (
+                        <>
+                            {/* Forecast Stats Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {forecastLoading ? (
+                                    [...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)
+                                ) : (
                                     <>
+                                        <Card className="border-none bg-card shadow-sm">
+                                            <CardContent className="pt-6">
+                                                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Horizon End Target</p>
+                                                <div className="mt-2 flex items-baseline gap-2">
+                                                    <h3 className="text-2xl font-bold">{formatPrice(forecastStats?.horizonEnd || 0)}</h3>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                        <Card className="border-none bg-card shadow-sm">
+                                            <CardContent className="pt-6">
+                                                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Projected Peak</p>
+                                                <div className="mt-2 flex items-baseline gap-2">
+                                                    <h3 className="text-2xl font-bold">{formatPrice(forecastStats?.max || 0)}</h3>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                        <Card className="border-none bg-card shadow-sm">
+                                            <CardContent className="pt-6">
+                                                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Avg. Prediction</p>
+                                                <div className="mt-2 flex items-baseline gap-2">
+                                                    <h3 className="text-2xl font-bold">{formatPrice(forecastStats?.avg || 0)}</h3>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Chart Card */}
+                            <Card className="border-none bg-card shadow-sm overflow-hidden">
+                                <CardContent className="p-0">
+                                    {forecastLoading || historicalLoading ? (
+                                        <Skeleton className="h-[450px] w-full" />
+                                    ) : (
                                         <PriceChart
-                                            historicalData={
-                                                historicalData?.data || []
-                                            }
-                                            forecastData={forecastData.data}
+                                            historicalData={historicalData?.data || []}
+                                            forecastData={forecastData?.data || []}
                                             frequency={frequency}
                                             commodity={selectedCommodity}
                                         />
-                                        {/* Forecast Data Table */}
-                                        <div className='mt-8'>
-                                            <h3 className='text-lg font-semibold mb-4 text-foreground'>
-                                                Forecast Data
-                                            </h3>
-                                            <div className='rounded-lg border border-border overflow-hidden'>
-                                                <Table>
-                                                    <TableHeader>
-                                                        <TableRow className='bg-muted/50'>
-                                                            <TableHead className='font-semibold'>
-                                                                Date
-                                                            </TableHead>
-                                                            <TableHead className='text-right font-semibold'>
-                                                                Forecasted Price
-                                                            </TableHead>
-                                                        </TableRow>
-                                                    </TableHeader>
-                                                    <TableBody>
-                                                        {forecastData.data.map(
-                                                            (item, index) => {
-                                                                // Forecast data uses 'predicted_price' instead of 'price'
-                                                                const price =
-                                                                    (
-                                                                        item as any
-                                                                    )
-                                                                        .predicted_price ??
-                                                                    (
-                                                                        item as any
-                                                                    ).price;
-                                                                return (
-                                                                    <TableRow
-                                                                        key={
-                                                                            index
-                                                                        }
-                                                                        className='hover:bg-muted/30 transition-colors'
-                                                                    >
-                                                                        <TableCell className='font-medium'>
-                                                                            {formatDate(
-                                                                                item.date
-                                                                            )}
-                                                                        </TableCell>
-                                                                        <TableCell className='text-right font-semibold text-primary'>
-                                                                            {formatPrice(
-                                                                                price
-                                                                            )}
-                                                                        </TableCell>
-                                                                    </TableRow>
-                                                                );
-                                                            }
-                                                        )}
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-                                        </div>
-                                    </>
-                                ) : forecastData?.data &&
-                                  Array.isArray(forecastData.data) &&
-                                  forecastData.data.length === 0 ? (
-                                    <div className='flex flex-col items-center justify-center h-64 text-muted-foreground space-y-3'>
-                                        <div className='rounded-full bg-muted p-4'>
-                                            <Target className='h-8 w-8' />
-                                        </div>
-                                        <p className='font-medium'>
-                                            No forecast data available
-                                        </p>
-                                        <p className='text-sm text-center'>
-                                            Unable to generate forecast for the
-                                            selected parameters
-                                        </p>
-                                    </div>
-                                ) : null}
-                            </CardContent>
-                        </Card>
-                    </motion.div>
-                )}
+                                    )}
+                                </CardContent>
+                            </Card>
 
-                {!shouldGenerate && (
-                    <motion.div variants={itemVariants}>
-                        <Card className='shadow-lg border-border/50'>
-                            <CardContent className='py-16 text-center'>
-                                <div className='flex flex-col items-center space-y-4'>
-                                    <div className='rounded-full bg-muted p-6'>
-                                        <Sparkles className='h-12 w-12 text-muted-foreground' />
-                                    </div>
+                            {/* Table Area */}
+                            {!forecastLoading && forecastData?.data && (
+                                <Card className="border-none bg-card shadow-sm">
+                                    <CardHeader className="flex flex-row items-center justify-between">
+                                        <div>
+                                            <CardTitle className="text-lg">Detailed Projections</CardTitle>
+                                            <CardDescription>Estimated prices for the selected horizon.</CardDescription>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="rounded-lg border overflow-hidden">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="bg-muted/50">
+                                                        <TableHead>Target Date</TableHead>
+                                                        <TableHead className="text-right">Projected Price</TableHead>
+                                                        <TableHead className="text-center">Confidence</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {forecastData.data.map((item, i) => (
+                                                        <TableRow key={i} className="hover:bg-muted/5 transition-colors">
+                                                            <TableCell className="font-medium">{formatDate(item.date)}</TableCell>
+                                                            <TableCell className="text-right font-bold text-primary">
+                                                                {formatPrice((item as any).predicted_price ?? item.price)}
+                                                            </TableCell>
+                                                            <TableCell className="text-center">
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary uppercase">
+                                                                    High
+                                                                </span>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            {forecastError && (
+                                <div className="p-6 bg-destructive/5 border border-destructive/10 rounded-xl flex items-center gap-4 text-destructive">
+                                    <AlertCircle className="h-6 w-6" />
                                     <div>
-                                        <p className='text-lg font-semibold text-foreground mb-2'>
-                                            Ready to Generate Forecast
-                                        </p>
-                                        <p className='text-sm text-muted-foreground'>
-                                            Configure parameters above and click
-                                            "Generate Forecast" to create
-                                            predictions
-                                        </p>
+                                        <p className="font-bold">Model execution failed</p>
+                                        <p className="text-sm opacity-80">{forecastError.message}</p>
                                     </div>
                                 </div>
-                            </CardContent>
-                        </Card>
-                    </motion.div>
-                )}
-            </motion.div>
-        </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            </div>
+        </motion.div>
     );
 }
+

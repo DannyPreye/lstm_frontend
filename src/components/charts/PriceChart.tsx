@@ -175,110 +175,130 @@ export function PriceChart({
 
     return (
         <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className={cn("w-full", className)}
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            className={cn("w-full bg-card/50 backdrop-blur-sm rounded-xl border border-border/50 p-6 shadow-sm", className)}
         >
-            <div className="mb-4">
-                <h3 className="text-lg font-semibold text-foreground">
-                    {commodity} Price Trend
-                </h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                    {frequency === "monthly" ? "Monthly" : "Daily"} data
-                    {hasHistorical && hasForecast && " with forecast"}
-                </p>
-            </div>
-            <ResponsiveContainer width="100%" height={450}>
-                <LineChart
-                    data={chartData}
-                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                >
-                    <defs>
-                        {hasHistorical && (
-                            <linearGradient id="historicalGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor={historicalColor} stopOpacity={0.3} />
-                                <stop offset="95%" stopColor={historicalColor} stopOpacity={0} />
-                            </linearGradient>
-                        )}
-                        {hasForecast && (
-                            <linearGradient id="forecastGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor={forecastColor} stopOpacity={0.2} />
-                                <stop offset="95%" stopColor={forecastColor} stopOpacity={0} />
-                            </linearGradient>
-                        )}
-                    </defs>
-                    <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="hsl(var(--border))"
-                        opacity={0.3}
-                    />
-                    <XAxis
-                        dataKey="displayDate"
-                        stroke="hsl(var(--muted-foreground))"
-                        style={{ fontSize: "11px", fontWeight: 500 }}
-                        angle={-45}
-                        textAnchor="end"
-                        height={80}
-                        tick={{ fill: "hsl(var(--muted-foreground))" }}
-                    />
-                    <YAxis
-                        stroke="hsl(var(--muted-foreground))"
-                        style={{ fontSize: "11px", fontWeight: 500 }}
-                        tick={{ fill: "hsl(var(--muted-foreground))" }}
-                        tickFormatter={(value) => `$${value.toLocaleString()}`}
-                        width={80}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend
-                        wrapperStyle={{ paddingTop: "20px" }}
-                        iconType="line"
-                        formatter={(value) => {
-                            if (value === "historical") return "Historical";
-                            if (value === "forecast") return "Forecast";
-                            return value;
-                        }}
-                        style={{ fontSize: "12px", fontWeight: 500 }}
-                    />
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+                <div>
+                    <h3 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                        <div className="w-2 h-6 bg-primary rounded-full" />
+                        {commodity} Price Analysis
+                    </h3>
+                    <p className="text-sm font-medium text-muted-foreground mt-1">
+                        Viewing {frequency === "monthly" ? "monthly" : "daily"} price trends
+                        {hasHistorical && hasForecast && " and predictive forecasts"}
+                    </p>
+                </div>
+                <div className="flex items-center gap-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     {hasHistorical && (
-                        <>
+                        <div className="flex items-center gap-1.5">
+                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: historicalColor }} />
+                            <span>Historical</span>
+                        </div>
+                    )}
+                    {hasForecast && (
+                        <div className="flex items-center gap-1.5">
+                            <div className="w-3 h-1.5 rounded-full" style={{ backgroundColor: forecastColor }} />
+                            <span>Forecast</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div className="h-[450px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                        data={chartData}
+                        margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
+                    >
+                        <defs>
+                            <linearGradient id="historicalGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={historicalColor} stopOpacity={0.2} />
+                                <stop offset="100%" stopColor={historicalColor} stopOpacity={0} />
+                            </linearGradient>
+                            <linearGradient id="forecastGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={forecastColor} stopOpacity={0.15} />
+                                <stop offset="100%" stopColor={forecastColor} stopOpacity={0} />
+                            </linearGradient>
+                        </defs>
+                        <CartesianGrid
+                            strokeDasharray="4 4"
+                            stroke="hsl(var(--muted-foreground))"
+                            vertical={false}
+                            opacity={0.1}
+                        />
+                        <XAxis
+                            dataKey="displayDate"
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11, fontWeight: 500 }}
+                            dy={15}
+                            interval="preserveStartEnd"
+                            minTickGap={30}
+                        />
+                        <YAxis
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11, fontWeight: 500 }}
+                            tickFormatter={(value) => `$${value >= 1000 ? (value / 1000).toFixed(1) + 'k' : value}`}
+                            dx={-5}
+                        />
+                        <Tooltip
+                            content={<CustomTooltip />}
+                            cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1, strokeDasharray: '4 4' }}
+                        />
+                        {hasHistorical && (
                             <Area
-                                type="monotone"
-                                dataKey="historical"
-                                stroke="none"
-                                fill="url(#historicalGradient)"
-                                fillOpacity={1}
-                            />
-                            <Line
                                 type="monotone"
                                 dataKey="historical"
                                 stroke={historicalColor}
                                 strokeWidth={3}
-                                dot={{ r: 4, fill: historicalColor, strokeWidth: 2, stroke: "#fff" }}
-                                activeDot={{ r: 6, strokeWidth: 2, stroke: "#fff" }}
-                                name="historical"
-                                connectNulls={false}
-                                animationDuration={1000}
+                                fill="url(#historicalGradient)"
+                                dot={{
+                                    r: 4,
+                                    fill: historicalColor,
+                                    stroke: "hsl(var(--background))",
+                                    strokeWidth: 2
+                                }}
+                                activeDot={{
+                                    r: 6,
+                                    stroke: "hsl(var(--background))",
+                                    strokeWidth: 3,
+                                    className: "shadow-lg"
+                                }}
+                                animationDuration={1500}
+                                connectNulls
                             />
-                        </>
-                    )}
-                    {hasForecast && (
-                        <Line
-                            type="monotone"
-                            dataKey="forecast"
-                            stroke={forecastColor}
-                            strokeWidth={3}
-                            strokeDasharray="8 4"
-                            dot={{ r: 4, fill: forecastColor, strokeWidth: 2, stroke: "#fff" }}
-                            activeDot={{ r: 6, strokeWidth: 2, stroke: "#fff" }}
-                            name="forecast"
-                            connectNulls={false}
-                            animationDuration={1000}
-                            animationBegin={hasHistorical ? 200 : 0}
-                        />
-                    )}
-                </LineChart>
-            </ResponsiveContainer>
+                        )}
+                        {hasForecast && (
+                            <Area
+                                type="monotone"
+                                dataKey="forecast"
+                                stroke={forecastColor}
+                                strokeWidth={3}
+                                strokeDasharray="6 6"
+                                fill="url(#forecastGradient)"
+                                dot={{
+                                    r: 4,
+                                    fill: forecastColor,
+                                    stroke: "hsl(var(--background))",
+                                    strokeWidth: 2
+                                }}
+                                activeDot={{
+                                    r: 6,
+                                    stroke: "hsl(var(--background))",
+                                    strokeWidth: 3
+                                }}
+                                animationDuration={1500}
+                                animationBegin={400}
+                                connectNulls
+                            />
+                        )}
+                    </AreaChart>
+                </ResponsiveContainer>
+            </div>
         </motion.div>
     );
 }

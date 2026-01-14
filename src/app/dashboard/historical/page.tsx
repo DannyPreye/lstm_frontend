@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
 import { useCommodities } from "@/hooks/use-commodities";
 import { useHistorical } from "@/hooks/use-historical";
 import { PriceChart } from "@/components/charts/PriceChart";
@@ -26,13 +25,19 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import {
     Loader2,
-    ArrowLeft,
     Download,
     TrendingUp,
     Calendar,
+    Search,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils/date-formatter";
 import { formatPrice } from "@/lib/utils/price-formatter";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { useBulkPrices } from "@/hooks/use-bulk-prices";
+import { AlertCircle, CheckCircle2, Info, ArrowUpRight, ArrowDownRight, Activity } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useSearchParams } from "next/navigation";
 
 const containerVariants = {
     hidden: { opacity: 0 },
@@ -42,7 +47,7 @@ const containerVariants = {
             staggerChildren: 0.1,
         },
     },
-} as const;
+};
 
 const itemVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -53,10 +58,21 @@ const itemVariants = {
             duration: 0.5,
         },
     },
-} as const;
+};
 
 export default function HistoricalViewerPage() {
-    const router = useRouter();
+    return (
+        <Suspense fallback={
+            <div className="flex items-center justify-center h-screen">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        }>
+            <HistoricalViewerContent />
+        </Suspense>
+    );
+}
+
+function HistoricalViewerContent() {
     const [selectedCommodity, setSelectedCommodity] = useState<string>("");
     const frequency: "monthly" = "monthly"; // Always monthly
     const { data: commoditiesData, isLoading: commoditiesLoading } =
@@ -69,7 +85,65 @@ export default function HistoricalViewerPage() {
         selectedCommodity || null,
         frequency,
         !!selectedCommodity
-    );
+        );
+      const searchParams = useSearchParams();
+
+    console.log(searchParams.get("commodity"))
+
+
+    useEffect(()=>{
+        if (commoditiesData?.commodities.length) {
+            const searchCommodity = searchParams.get("commodity");
+            if(searchCommodity && commoditiesData?.commodities.includes(searchCommodity)){
+                setSelectedCommodity(searchCommodity);
+            }else{
+                setSelectedCommodity(commoditiesData?.commodities[0]);
+            }
+        }
+    },[commoditiesData])
+
+    const {
+        submitBulkPrices,
+        isLoading: isSubmitting,
+        error: submitError,
+        success: submitSuccess,
+        setSuccess: setSubmitSuccess
+    } = useBulkPrices();
+
+    const [bulkYear, setBulkYear] = useState<number>(2025);
+    const [bulkPrices, setBulkPrices] = useState<Record<number, string>>({});
+
+    const handleBulkSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const success = await submitBulkPrices(selectedCommodity, bulkYear, bulkPrices);
+        if (success) {
+            setBulkPrices({});
+            // Refresh historical data
+            // In a real app, you might want to invalidate the query
+        }
+    };
+
+    const handlePriceChange = (month: number, value: string) => {
+        setBulkPrices(prev => ({ ...prev, [month]: value }));
+        setSubmitSuccess(false);
+    };
+
+    const stats = historicalData?.data ? {
+        max: Math.max(...historicalData.data.map(d => d.price)),
+        min: Math.min(...historicalData.data.map(d => d.price)),
+        avg: historicalData.data.reduce((acc, curr) => acc + curr.price, 0) / historicalData.data.length,
+        latest: historicalData.data[historicalData.data.length - 1]?.price,
+        previous: historicalData.data[historicalData.data.length - 2]?.price,
+    } : null;
+
+    const priceChange = stats?.latest && stats?.previous
+        ? ((stats.latest - stats.previous) / stats.previous) * 100
+        : 0;
+
+    const months = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ];
 
     const handleExportCSV = () => {
         if (!historicalData?.data) return;
@@ -113,271 +187,259 @@ export default function HistoricalViewerPage() {
     };
 
     return (
-        <div className='min-h-screen bg-background p-4 md:p-8'>
-            <motion.div
-                variants={containerVariants}
-                initial='hidden'
-                animate='visible'
-                className='max-w-7xl mx-auto space-y-6'
-            >
-                {/* Header */}
-                <motion.div
-                    variants={itemVariants}
-                    className='flex items-center justify-between'
-                >
-                    <div className='flex items-center gap-4'>
+        <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            className="space-y-8 max-w-7xl mx-auto"
+        >
+            {/* Header Section */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Historical Data</h1>
+                    <p className="text-muted-foreground mt-1">
+                        Explore past performance and update market prices.
+                    </p>
+                </div>
+                <div className="flex items-center gap-3">
+                    {commoditiesLoading ? (
+                        <Skeleton className="h-10 w-48" />
+                    ) : (
+                        <div className="flex items-center gap-2 bg-background border rounded-lg px-3 py-1 shadow-sm">
+                            <Search className="h-4 w-4 text-muted-foreground" />
+                            <select
+                                value={selectedCommodity}
+                                onChange={(e) => setSelectedCommodity(e.target.value)}
+                                className="bg-transparent border-none focus:ring-0 text-sm font-medium py-1 pr-8"
+                            >
+                                <option value="">Select Commodity...</option>
+                                {commoditiesData?.commodities.map((c) => (
+                                    <option key={c} value={c}>{c}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                    {historicalData?.data && historicalData.data.length > 0 && (
                         <Button
-                            variant='outline'
-                            onClick={() => router.push("/dashboard")}
-                            className='shadow-sm'
+                            variant="outline"
+                            onClick={handleExportCSV}
+                            size="sm"
+                            className="h-10"
                         >
-                            <ArrowLeft className='h-4 w-4 mr-2' />
-                            Back to Dashboard
+                            <Download className="h-4 w-4 mr-2" />
+                            Export
                         </Button>
+                    )}
+                </div>
+            </div>
+
+            {!selectedCommodity ? (
+                <Card className="border-dashed border-2 bg-muted/30 h-[400px] flex items-center justify-center">
+                    <div className="text-center space-y-4 max-w-sm">
+                        <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
+                            <Activity className="h-8 w-8 text-primary" />
+                        </div>
                         <div>
-                            <h1 className='text-3xl font-bold text-foreground'>
-                                Historical Viewer
-                            </h1>
-                            <p className='text-muted-foreground mt-1'>
-                                Explore historical price data for commodities
+                            <h3 className="text-lg font-semibold">No Commodity Selected</h3>
+                            <p className="text-muted-foreground">
+                                Select a commodity from the dropdown above to view historical trends and manage prices.
                             </p>
                         </div>
                     </div>
-                </motion.div>
+                </Card>
+            ) : (
+                <Tabs defaultValue="analysis" className="space-y-6">
+                    <div className="flex items-center justify-between">
+                        <TabsList className="grid w-full max-w-[400px] grid-cols-2">
+                            <TabsTrigger value="analysis">Price Analysis</TabsTrigger>
+                            <TabsTrigger value="entry">Bulk Data Entry</TabsTrigger>
+                        </TabsList>
+                    </div>
 
-                {/* Controls */}
-                <motion.div variants={itemVariants}>
-                    <Card className='shadow-lg border-border/50'>
-                        <CardHeader className='pb-4'>
-                            <CardTitle className='text-xl'>
-                                Select Parameters
-                            </CardTitle>
-                            <CardDescription>
-                                Choose a commodity to view historical price data
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className='space-y-6'>
-                            <div className='space-y-2'>
-                                <label className='text-sm font-semibold text-foreground'>
-                                    Commodity
-                                </label>
-                                {commoditiesLoading ? (
-                                    <Skeleton className='h-10 w-full' />
-                                ) : (
-                                    <Select
-                                        value={selectedCommodity}
-                                        onChange={(e) =>
-                                            setSelectedCommodity(e.target.value)
-                                        }
-                                        className='w-full'
-                                    >
-                                        <option value=''>
-                                            Select a commodity...
-                                        </option>
-                                        {commoditiesData?.commodities.map(
-                                            (commodity) => (
-                                                <option
-                                                    key={commodity}
-                                                    value={commodity}
-                                                >
-                                                    {commodity}
-                                                </option>
-                                            )
-                                        )}
-                                    </Select>
-                                )}
+                    <TabsContent value="analysis" className="space-y-6">
+                        {/* Stats Grid */}
+                        {historicalLoading ? (
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                {[...Array(4)].map((_, i) => (
+                                    <Skeleton key={i} className="h-24 rounded-xl" />
+                                ))}
                             </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
+                        ) : stats ? (
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <Card className="bg-primary/5 border-primary/10">
+                                    <CardContent className="pt-6">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-sm font-medium text-muted-foreground">Latest Price</p>
+                                            <Activity className="h-4 w-4 text-primary" />
+                                        </div>
+                                        <div className="mt-2 flex items-baseline gap-2">
+                                            <h3 className="text-2xl font-bold">{formatPrice(stats.latest)}</h3>
+                                            <span className={cn(
+                                                "text-xs font-bold flex items-center",
+                                                priceChange >= 0 ? "text-green-500" : "text-red-500"
+                                            )}>
+                                                {priceChange >= 0 ? <ArrowUpRight className="h-3 w-3 mr-0.5" /> : <ArrowDownRight className="h-3 w-3 mr-0.5" />}
+                                                {Math.abs(priceChange).toFixed(1)}%
+                                            </span>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                                <Card>
+                                    <CardContent className="pt-6">
+                                        <p className="text-sm font-medium text-muted-foreground">Year High</p>
+                                        <h3 className="text-2xl font-bold mt-2">{formatPrice(stats.max)}</h3>
+                                    </CardContent>
+                                </Card>
+                                <Card>
+                                    <CardContent className="pt-6">
+                                        <p className="text-sm font-medium text-muted-foreground">Year Low</p>
+                                        <h3 className="text-2xl font-bold mt-2">{formatPrice(stats.min)}</h3>
+                                    </CardContent>
+                                </Card>
+                                <Card>
+                                    <CardContent className="pt-6">
+                                        <p className="text-sm font-medium text-muted-foreground">Average</p>
+                                        <h3 className="text-2xl font-bold mt-2">{formatPrice(stats.avg)}</h3>
+                                    </CardContent>
+                                </Card>
+                            </div>
+                        ) : null}
 
-                {/* Chart */}
-                {selectedCommodity && (
-                    <motion.div>
-                        <Card className='shadow-lg border-border/50'>
-                            <CardHeader className='flex flex-row items-center justify-between pb-4'>
-                                <div>
-                                    <CardTitle className='text-xl flex items-center gap-2'>
-                                        <TrendingUp className='h-5 w-5 text-primary' />
-                                        {selectedCommodity} - Historical Prices
-                                    </CardTitle>
-                                    <CardDescription className='flex items-center gap-2 mt-1'>
-                                        <Calendar className='h-4 w-4' />
-                                        Monthly frequency
-                                        {historicalData?.data &&
-                                            ` • ${historicalData.data.length} data points`}
-                                    </CardDescription>
-                                </div>
-                                {historicalData?.data &&
-                                    Array.isArray(historicalData.data) &&
-                                    historicalData.data.length > 0 && (
-                                        <Button
-                                            variant='outline'
-                                            onClick={handleExportCSV}
-                                            className='shadow-sm'
-                                        >
-                                            <Download className='h-4 w-4 mr-2' />
-                                            Export CSV
-                                        </Button>
-                                    )}
+                        {/* Chart Area */}
+                        {historicalLoading ? (
+                            <Skeleton className="h-[500px] w-full rounded-xl" />
+                        ) : historicalData?.data ? (
+                            <PriceChart
+                                historicalData={historicalData.data}
+                                frequency={frequency}
+                                commodity={selectedCommodity}
+                            />
+                        ) : null}
+
+                        {/* Table Area */}
+                        {!historicalLoading && historicalData?.data && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-lg">Recent Historical Records</CardTitle>
+                                    <CardDescription>Comprehensive list of recorded monthly prices.</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="rounded-md border">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Date</TableHead>
+                                                    <TableHead>Price</TableHead>
+                                                    <TableHead>Status</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {historicalData.data.slice(-12).reverse().map((item, i) => (
+                                                    <TableRow key={i}>
+                                                        <TableCell className="font-medium">{formatDate(item.date)}</TableCell>
+                                                        <TableCell>{formatPrice(item.price)}</TableCell>
+                                                        <TableCell>
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                                                                Actual
+                                                            </span>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
+                    </TabsContent>
+
+                    <TabsContent value="entry" className="space-y-6">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Calendar className="h-5 w-5 text-primary" />
+                                    Bulk Price Entry for {selectedCommodity}
+                                </CardTitle>
+                                <CardDescription>
+                                    Enter actual market prices for each month of the selected year.
+                                </CardDescription>
                             </CardHeader>
                             <CardContent>
-                                {historicalLoading ? (
-                                    <div className='space-y-4'>
-                                        <Skeleton className='h-[450px] w-full' />
-                                        <div className='space-y-2'>
-                                            <Skeleton className='h-10 w-full' />
-                                            <Skeleton className='h-10 w-full' />
-                                            <Skeleton className='h-10 w-full' />
+                                <form onSubmit={handleBulkSubmit} className="space-y-8">
+                                    <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
+                                        <div className="space-y-1">
+                                            <label className="text-sm font-semibold">Target Year</label>
+                                            <Input
+                                                type="number"
+                                                value={bulkYear}
+                                                onChange={(e) => setBulkYear(parseInt(e.target.value))}
+                                                className="w-32"
+                                            />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-xs text-muted-foreground">
+                                                <Info className="h-3 w-3 inline mr-1" />
+                                                Tip: You can fill as many months as you have data for. Empty fields will be skipped.
+                                            </p>
                                         </div>
                                     </div>
-                                ) : historicalError ? (
-                                    <div className='flex flex-col items-center justify-center h-64 text-destructive space-y-3'>
-                                        <div className='rounded-full bg-destructive/10 p-3'>
-                                            <Loader2 className='h-6 w-6' />
-                                        </div>
-                                        <p className='font-semibold text-lg'>
-                                            Error loading historical data
-                                        </p>
-                                        <p className='text-sm text-muted-foreground text-center max-w-md'>
-                                            {historicalError instanceof Error
-                                                ? historicalError.message
-                                                : "Please try again or select a different commodity"}
-                                        </p>
-                                    </div>
-                                ) : historicalData?.data &&
-                                  Array.isArray(historicalData.data) &&
-                                  historicalData.data.length > 0 ? (
-                                    <>
-                                        <PriceChart
-                                            historicalData={historicalData.data}
-                                            frequency={frequency}
-                                            commodity={selectedCommodity}
-                                        />
-                                        {/* Data Table */}
-                                        <div className='mt-8'>
-                                            <h3 className='text-lg font-semibold mb-4 text-foreground'>
-                                                Data Table
-                                            </h3>
-                                            <div className='rounded-lg border border-border overflow-hidden'>
-                                                <Table>
-                                                    <TableHeader>
-                                                        <TableRow className='bg-muted/50'>
-                                                            <TableHead className='font-semibold'>
-                                                                Date
-                                                            </TableHead>
-                                                            <TableHead className='text-right font-semibold'>
-                                                                Price
-                                                            </TableHead>
-                                                            {(
-                                                                historicalData
-                                                                    .data[0] as any
-                                                            )?.season_flag !==
-                                                                undefined && (
-                                                                <TableHead className='text-center font-semibold'>
-                                                                    Season
-                                                                </TableHead>
-                                                            )}
-                                                        </TableRow>
-                                                    </TableHeader>
-                                                    <TableBody>
-                                                        {historicalData.data.map(
-                                                            (item, index) => {
-                                                                const seasonFlag =
-                                                                    (
-                                                                        item as any
-                                                                    )
-                                                                        .season_flag;
-                                                                const isPeakSeason =
-                                                                    seasonFlag ===
-                                                                    1;
-                                                                return (
-                                                                    <TableRow
-                                                                        key={
-                                                                            index
-                                                                        }
-                                                                        className='hover:bg-muted/30 transition-colors'
-                                                                    >
-                                                                        <TableCell className='font-medium'>
-                                                                            {formatDate(
-                                                                                item.date
-                                                                            )}
-                                                                        </TableCell>
-                                                                        <TableCell className='text-right font-semibold text-primary'>
-                                                                            {formatPrice(
-                                                                                item.price
-                                                                            )}
-                                                                        </TableCell>
-                                                                        {seasonFlag !==
-                                                                            undefined && (
-                                                                            <TableCell className='text-center'>
-                                                                                <span
-                                                                                    className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                                                                        isPeakSeason
-                                                                                            ? "bg-primary/20 text-primary"
-                                                                                            : "bg-muted text-muted-foreground"
-                                                                                    }`}
-                                                                                >
-                                                                                    {isPeakSeason
-                                                                                        ? "Peak"
-                                                                                        : "Off"}
-                                                                                </span>
-                                                                            </TableCell>
-                                                                        )}
-                                                                    </TableRow>
-                                                                );
-                                                            }
-                                                        )}
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-                                        </div>
-                                    </>
-                                ) : historicalData?.data &&
-                                  Array.isArray(historicalData.data) &&
-                                  historicalData.data.length === 0 ? (
-                                    <div className='flex flex-col items-center justify-center h-64 text-muted-foreground space-y-3'>
-                                        <div className='rounded-full bg-muted p-4'>
-                                            <TrendingUp className='h-8 w-8' />
-                                        </div>
-                                        <p className='font-medium'>
-                                            No historical data available
-                                        </p>
-                                        <p className='text-sm text-center'>
-                                            No data found for{" "}
-                                            {selectedCommodity} with monthly
-                                            frequency
-                                        </p>
-                                    </div>
-                                ) : null}
-                            </CardContent>
-                        </Card>
-                    </motion.div>
-                )}
 
-                {!selectedCommodity && (
-                    <motion.div variants={itemVariants}>
-                        <Card className='shadow-lg border-border/50'>
-                            <CardContent className='py-16 text-center'>
-                                <div className='flex flex-col items-center space-y-4'>
-                                    <div className='rounded-full bg-muted p-6'>
-                                        <TrendingUp className='h-12 w-12 text-muted-foreground' />
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                                        {months.map((month, index) => (
+                                            <div key={month} className="space-y-2">
+                                                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                                                    {month}
+                                                </label>
+                                                <div className="relative">
+                                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</div>
+                                                    <Input
+                                                        placeholder="0.00"
+                                                        className="pl-7"
+                                                        value={bulkPrices[index] || ""}
+                                                        onChange={(e) => handlePriceChange(index, e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
-                                    <div>
-                                        <p className='text-lg font-semibold text-foreground mb-2'>
-                                            Select a Commodity
-                                        </p>
-                                        <p className='text-sm text-muted-foreground'>
-                                            Choose a commodity from the dropdown
-                                            above to view historical price data
-                                        </p>
+
+                                    {submitError && (
+                                        <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex gap-3 text-destructive">
+                                            <AlertCircle className="h-5 w-5 shrink-0" />
+                                            <p className="text-sm font-medium">{submitError}</p>
+                                        </div>
+                                    )}
+
+                                    {submitSuccess && (
+                                        <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg flex gap-3 text-green-600 dark:text-green-400">
+                                            <CheckCircle2 className="h-5 w-5 shrink-0" />
+                                            <p className="text-sm font-medium">Prices successfully submitted for {bulkYear}!</p>
+                                        </div>
+                                    )}
+
+                                    <div className="flex justify-end pt-4">
+                                        <Button
+                                            type="submit"
+                                            disabled={isSubmitting || Object.keys(bulkPrices).length === 0}
+                                            className="px-8"
+                                        >
+                                            {isSubmitting ? (
+                                                <>
+                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                    Submitting...
+                                                </>
+                                            ) : (
+                                                "Submit Yearly Prices"
+                                            )}
+                                        </Button>
                                     </div>
-                                </div>
+                                </form>
                             </CardContent>
                         </Card>
-                    </motion.div>
-                )}
-            </motion.div>
-        </div>
+                    </TabsContent>
+                </Tabs>
+            )}
+        </motion.div>
     );
 }
+

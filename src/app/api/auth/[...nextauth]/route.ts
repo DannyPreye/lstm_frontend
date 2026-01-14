@@ -4,6 +4,35 @@ import { AuthService } from "@/lib/api/services/AuthService";
 import type { AuthTokenRequest } from "@/lib/api/models/AuthTokenRequest";
 import type { ApiError } from "@/lib/api/core/ApiError";
 
+/**
+ * Helper function to refresh access token using the refresh token
+ */
+async function refreshAccessToken(token: any)
+{
+    try {
+        const refreshedTokens = await AuthService.authTokenRefreshCreate({
+            refresh: token.refreshToken,
+        });
+
+        if (!refreshedTokens.access) {
+            throw new Error("Failed to refresh token");
+        }
+
+        return {
+            ...token,
+            accessToken: refreshedTokens.access,
+            accessTokenExpires: Date.now() + 5 * 60 * 1000, // 5 mins fallback
+            refreshToken: refreshedTokens.refresh ?? token.refreshToken, // Fall back to old refresh token
+        };
+    } catch (error) {
+        console.error("RefreshTokenError", error);
+        return {
+            ...token,
+            error: "RefreshAccessTokenError",
+        };
+    }
+}
+
 export const authOptions: NextAuthOptions = {
     providers: [
         CredentialsProvider({
@@ -26,8 +55,6 @@ export const authOptions: NextAuthOptions = {
 
                     const authToken = await AuthService.authTokenCreate(tokenRequest);
 
-
-
                     // Handle both response formats: { token } or { access, refresh }
                     const accessToken = (authToken as any).access || (authToken as any).token;
                     const refreshToken = (authToken as any).refresh;
@@ -44,10 +71,9 @@ export const authOptions: NextAuthOptions = {
                         refreshToken: refreshToken,
                     };
                 } catch (error: any) {
-                    console.error(error);
+                    console.error("AuthorizeError", error);
                     const apiError = error as ApiError;
                     if (apiError.status === 401) {
-
                         throw new Error("Invalid username or password");
                     }
                     throw new Error(apiError.message || "Authentication failed");
@@ -56,24 +82,33 @@ export const authOptions: NextAuthOptions = {
         }),
     ],
     callbacks: {
-        async jwt({ token, user })
+        async jwt({ token, user, account })
         {
-            if (user) {
-                token.accessToken = (user as any).accessToken;
-                token.refreshToken = (user as any).refreshToken;
-                token.id = user.id;
+            // Initial sign in
+            if (user && account) {
+                return {
+                    accessToken: (user as any).accessToken,
+                    refreshToken: (user as any).refreshToken,
+                    accessTokenExpires: Date.now() + 5 * 60 * 1000, // Assume 5 mins if not provided
+                    user,
+                };
             }
 
-            console.log("jwt token", token);
-            return token;
+            // Return previous token if the access token has not expired yet
+            if (Date.now() < (token as any).accessTokenExpires) {
+                return token;
+            }
+
+            // Access token has expired, try to update it
+            return refreshAccessToken(token);
         },
         async session({ session, token })
         {
             if (token) {
+                (session as any).user = (token as any).user;
                 (session as any).accessToken = token.accessToken;
-                (session as any).user.id = token.id;
+                (session as any).error = (token as any).error;
             }
-            console.log("session token", token);
             return session;
         },
     },
