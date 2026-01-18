@@ -35,7 +35,8 @@ import { formatPrice } from "@/lib/utils/price-formatter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { useBulkPrices } from "@/hooks/use-bulk-prices";
-import { AlertCircle, CheckCircle2, Info, ArrowUpRight, ArrowDownRight, Activity } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info, ArrowUpRight, ArrowDownRight, Activity, FileSpreadsheet, Upload } from "lucide-react";
+import { generateExcelTemplate, parseExcelTemplate } from "@/lib/utils/excel-handler";
 import { cn } from "@/lib/utils";
 import { useSearchParams } from "next/navigation";
 
@@ -126,6 +127,28 @@ function HistoricalViewerContent() {
     const handlePriceChange = (month: number, value: string) => {
         setBulkPrices(prev => ({ ...prev, [month]: value }));
         setSubmitSuccess(false);
+    };
+
+    const handleDownloadTemplate = () => {
+        generateExcelTemplate(selectedCommodity, bulkYear);
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        try {
+            const extractedPrices = await parseExcelTemplate(file);
+            if (Object.keys(extractedPrices).length === 0) {
+                // You might want to show an error here
+                return;
+            }
+            setBulkPrices(extractedPrices);
+            setSubmitSuccess(false);
+        } catch (err: any) {
+            console.error("Error parsing Excel:", err);
+            // Handle error (use setSubmitError if you want)
+        }
     };
 
     const stats = historicalData?.data ? {
@@ -376,11 +399,42 @@ function HistoricalViewerContent() {
                                                 className="w-32"
                                             />
                                         </div>
-                                        <div className="flex-1">
+                                        <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center gap-2">
                                             <p className="text-xs text-muted-foreground">
                                                 <Info className="h-3 w-3 inline mr-1" />
                                                 Tip: You can fill as many months as you have data for. Empty fields will be skipped.
                                             </p>
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 text-xs"
+                                                    onClick={handleDownloadTemplate}
+                                                >
+                                                    <FileSpreadsheet className="h-3 w-3 mr-1" />
+                                                    Download Excel Template
+                                                </Button>
+                                                <div className="relative">
+                                                    <Input
+                                                        type="file"
+                                                        accept=".xlsx"
+                                                        className="hidden"
+                                                        id="excel-upload"
+                                                        onChange={handleFileUpload}
+                                                    />
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="h-8 text-xs"
+                                                        onClick={() => document.getElementById('excel-upload')?.click()}
+                                                    >
+                                                        <Upload className="h-3 w-3 mr-1" />
+                                                        Upload Excel
+                                                    </Button>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
